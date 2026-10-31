@@ -1,0 +1,35 @@
+---
+title: "Why hybrid retrieval matters"
+summary: "Semantic search alone misses exact identifiers; keyword search alone misses meaning. Combining them fixes both."
+date: "2026-09-12"
+category: "AI"
+draft: true
+---
+
+> **Sample draft.** This post is a placeholder outline and has not been published.
+
+## The failure modes
+
+| Query | Semantic only | Keyword only |
+| --- | --- | --- |
+| "EMP-1042" | weak | strong |
+| "people who know ML" | strong | weak |
+
+## Combining scores
+
+Run both retrievers, merge with reciprocal rank fusion, then apply **metadata filters** for hard constraints.
+
+```python
+def rrf(rankings, k=60):
+    scores = {}
+    for ranking in rankings:
+        for rank, doc_id in enumerate(ranking):
+            scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank + 1)
+    return sorted(scores, key=scores.get, reverse=True)
+```
+
+## Outline still to write
+
+- Choosing the fusion constant
+- Where reranking fits
+- Evaluating recall
