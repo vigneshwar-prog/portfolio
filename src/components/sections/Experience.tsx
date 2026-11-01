@@ -29,7 +29,6 @@ export function Experience() {
       id="experience"
       eyebrow="Experience"
       title="From full-stack internships to enterprise engineering."
-      intro="Four years across software development, backend services, automation frameworks and network systems."
     >
       <ol ref={ref} className="relative">
         {/* rail */}

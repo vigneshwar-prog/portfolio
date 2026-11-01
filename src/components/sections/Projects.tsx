@@ -77,11 +77,11 @@ export function Projects() {
       id="projects"
       eyebrow="Featured work"
       title="Systems I've designed and built."
-      intro="A mix of professional automation work and personal backend and AI projects. Each one has a case study covering the problem, architecture and trade-offs."
+      intro="Click any project for the full case study."
     >
-      <div className="grid gap-4 md:grid-flow-dense md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         {projects.map((p, i) => (
-          <ProjectCard key={p.slug} p={p} index={i} featured={i === 0 || i === 4} />
+          <ProjectCard key={p.slug} p={p} index={i} />
         ))}
       </div>
     </Section>

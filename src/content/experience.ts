@@ -22,17 +22,12 @@ export const experience: Role[] = [
     summary:
       "Building AI-powered workflows, RAG pipelines, MCP integrations and automation platforms in production.",
     highlights: [
-      "Built a hybrid RAG system over enterprise data (LangChain, Chroma) with metadata filtering, RRF reranking, an LLM router for multi-intent queries, LLM-as-judge evaluation and anti-hallucination guardrails.",
-      "Built and self-hosted an OAuth-enabled MCP server (FastMCP) exposing Webex messaging, meeting scheduling and check-in summarization tools to LLM/agent clients.",
-      "Developed and containerised a Django device-management platform with FastAPI internal services, SSH tunneling and session pooling — reducing manual execution effort by 80%.",
-      "Designed an AI-powered workflow automating end-to-end testing — script generation, orchestration, log analysis and reporting — cutting manual effort by 60%+.",
-      "Integrated CXTM, MongoDB and Splunk for automated KPI collection and dashboards.",
-      "Built reusable, dynamic PCAP validation and verification keywords.",
-      "Reviewed code, led design reviews, triaged production issues and maintained technical documentation.",
-      "Worked across NX-OS, IOS-XE and IOS-XR on Nexus, Catalyst and ASR platforms, plus 5G core (SMF, UPF, AMF, PCF).",
-      "Delivered for enterprise customers in Australia, the United States and railway infrastructure.",
+      "Built a hybrid RAG system (LangChain, Chroma) with RRF reranking, LLM routing and LLM-as-judge evaluation.",
+      "Built and self-hosted an OAuth-secured MCP server exposing Webex tools to AI agents.",
+      "Containerised a Django + FastAPI device-management platform — 80% less manual effort.",
+      "Designed an AI workflow automating end-to-end testing — 60%+ less manual effort.",
     ],
-    stack: ["Python", "LangChain", "Chroma", "FastMCP", "Django", "FastAPI", "Docker", "MongoDB", "Splunk"],
+    stack: ["Python", "LangChain", "Chroma", "FastMCP", "Django", "FastAPI", "Docker"],
   },
   {
     company: "Cisco",

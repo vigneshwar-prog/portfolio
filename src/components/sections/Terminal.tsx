@@ -4,22 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { profile } from "@/content/profile";
 import { projects } from "@/content/projects";
 import { skillGroups } from "@/content/skills";
-import { labItems } from "@/content/lab";
 
 type Line = { kind: "in" | "out"; text: string };
 
 const COMMANDS: Record<string, () => string> = {
-  help: () => "Available: whoami, about, skills, projects, building, contact, clear",
+  help: () => "Available: whoami, about, skills, projects, contact, clear",
   whoami: () => `${profile.name} — ${profile.designation} @ ${profile.company}, ${profile.location}`,
   about: () => profile.about[1],
   skills: () => skillGroups.map((g) => `${g.title}: ${g.skills.map((s) => s.name).join(", ")}`).join("\n"),
   projects: () => projects.map((p) => `→ ${p.title}  (/projects/${p.slug})`).join("\n"),
-  building: () =>
-    labItems.filter((l) => l.status === "Building").map((l) => `● ${l.name} — ${l.description}`).join("\n") || "Nothing right now.",
   contact: () => "Scroll to the contact section, or type `goto contact`.",
 };
 
-const SUGGESTED = ["whoami", "projects", "building", "skills"];
+const SUGGESTED = ["whoami", "projects", "skills"];
 
 export function Terminal() {
   const [lines, setLines] = useState<Line[]>([

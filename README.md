@@ -6,9 +6,8 @@ Personal portfolio built with **Next.js 15 (App Router)**, **TypeScript**, **Tai
 - Hero with animated network background, terminal-style About, animated experience timeline
 - Skills grouped by depth (professional / hands-on / exploring) + interactive technology constellation
 - Project case-study pages with architecture diagrams (`/projects/[slug]`)
-- Engineering Lab with filterable status cards
 - MDX blog (`/blog`) — add a post by dropping in a file
-- Contact form with server-side validation, honeypot, timing check, rate limiting and email via Resend
+- Contact form (name, subject, message) with server-side validation, spam protection and email via Resend
 - SEO: metadata, Open Graph/Twitter images, sitemap, robots.txt, JSON-LD, canonical URLs, custom 404
 
 ## Local development
@@ -43,7 +42,6 @@ All content lives in `src/content/` — no component changes required:
 | `experience.ts` | Timeline roles |
 | `skills.ts` | Skill groups and levels |
 | `projects.ts` | Project cards + case-study pages |
-| `lab.ts` | Engineering Lab entries |
 | `achievements.ts` | Awards and certifications |
 | `blog/*.mdx` | Blog posts |
 

@@ -7,12 +7,11 @@ import { GithubIcon, LinkedinIcon } from "@/components/ui/Icon";
 import { Reveal, Section } from "@/components/ui/Section";
 import { cn } from "@/lib/utils";
 
-type Errors = Partial<Record<"name" | "email" | "subject" | "message", string[]>>;
+type Errors = Partial<Record<"name" | "subject" | "message", string[]>>;
 type Status = { state: "idle" | "sending" | "sent" | "error"; message?: string };
 
 const fields = [
   { name: "name", label: "Name", type: "text", autoComplete: "name" },
-  { name: "email", label: "Email", type: "email", autoComplete: "email" },
   { name: "subject", label: "Subject", type: "text", autoComplete: "off" },
 ] as const;
 
@@ -81,10 +80,10 @@ export function Contact({ hasResume }: { hasResume: boolean }) {
       eyebrow="Contact"
       title={
         <>
-          Let&apos;s build something <span className="font-serif font-normal italic text-gradient">together.</span>
+          Let&apos;s build something <span className="font-serif font-normal italic text-gradient">Useful.</span>
         </>
       }
-      intro="Open to Software Engineer, Backend Engineer and AI Engineering roles — and always happy to talk about RAG, MCP or backend architecture."
+      intro="Open to Software, Backend and AI Engineering roles."
     >
       <div className="grid gap-8 lg:grid-cols-[1fr_1.3fr]">
         <Reveal className="space-y-3">
@@ -109,13 +108,12 @@ export function Contact({ hasResume }: { hasResume: boolean }) {
               <>
                 <div className="grid gap-4 sm:grid-cols-2">
                   {fields.map((f) => (
-                    <div key={f.name} className={f.name === "subject" ? "sm:col-span-2" : ""}>
+                    <div key={f.name} className="sm:col-span-2">
                       <label htmlFor={f.name} className="mb-1.5 block text-sm">{f.label}</label>
                       <input
                         id={f.name}
                         name={f.name}
                         type={f.type}
-                        required
                         autoComplete={f.autoComplete}
                         aria-invalid={!!errors[f.name]}
                         aria-describedby={errors[f.name] ? `${f.name}-error` : undefined}
@@ -129,7 +127,6 @@ export function Contact({ hasResume }: { hasResume: boolean }) {
                     <textarea
                       id="message"
                       name="message"
-                      required
                       rows={6}
                       aria-invalid={!!errors.message}
                       aria-describedby={errors.message ? "message-error" : undefined}

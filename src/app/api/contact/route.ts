@@ -5,10 +5,9 @@ import { Resend } from "resend";
 export const runtime = "nodejs";
 
 const schema = z.object({
-  name: z.string().trim().min(2, "Please enter your name").max(100),
-  email: z.string().trim().email("Please enter a valid email").max(200),
-  subject: z.string().trim().min(3, "Please add a subject").max(150),
-  message: z.string().trim().min(10, "Message should be at least 10 characters").max(5000),
+  name: z.string().trim().min(1, "Name is required").max(200),
+  subject: z.string().trim().min(1, "Subject is required").max(300),
+  message: z.string().trim().min(1, "Message is required").max(10000),
   website: z.string().max(0).optional(), // honeypot — must stay empty
   startedAt: z.number().optional(), // time the form was rendered
 });
@@ -48,7 +47,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Please fix the highlighted fields.", fieldErrors }, { status: 422 });
   }
 
-  const { name, email, subject, message, startedAt } = parsed.data;
+  const { name, subject, message, startedAt } = parsed.data;
   // Submissions faster than 3s after render are almost certainly bots.
   if (startedAt && Date.now() - startedAt < 3000) return NextResponse.json({ ok: true });
 
@@ -67,10 +66,9 @@ export async function POST(req: Request) {
     const { error } = await resend.emails.send({
       from,
       to,
-      replyTo: email,
       subject: `[Portfolio] ${subject}`,
-      text: `From: ${name} <${email}>\n\n${message}`,
-      html: `<p><strong>From:</strong> ${escape(name)} &lt;${escape(email)}&gt;</p><p style="white-space:pre-wrap">${escape(message)}</p>`,
+      text: `From: ${name}\n\n${message}`,
+      html: `<p><strong>From:</strong> ${escape(name)}</p><p style="white-space:pre-wrap">${escape(message)}</p>`,
     });
     if (error) throw new Error(error.message);
     return NextResponse.json({ ok: true });

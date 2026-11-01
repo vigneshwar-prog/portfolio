@@ -100,7 +100,6 @@ export function Skills() {
       id="skills"
       eyebrow="Skills"
       title="Tools I reach for — and how well I know them."
-      intro="Grouped by domain, and honest about depth: what I use professionally, what I've built with in projects, and what I'm currently exploring."
     >
       <div className="mb-8 flex flex-wrap gap-4 text-sm">
         {(Object.keys(levelLabel) as SkillLevel[]).map((l) => (
