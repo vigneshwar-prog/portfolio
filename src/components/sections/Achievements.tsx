@@ -15,10 +15,10 @@ const symbols: Record<string, { icon: React.ReactNode; tone: string }> = {
   "Automation Genie": { icon: <Workflow size={20} />, tone: "text-green border-green/30 bg-green/10" },
   "Rising Star": {
     icon: <Star size={20} fill="currentColor" className="drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]" />,
-    tone: "text-amber-400 border-amber-400/30 bg-amber-400/10",
+    tone: "text-amber border-amber/30 bg-amber/10",
   },
   "Hackathon Winner": { icon: <Code2 size={20} />, tone: "text-cyan border-cyan/30 bg-cyan/10" },
-  "Content Creator": { icon: <YoutubeIcon />, tone: "text-red-500 border-red-500/30 bg-red-500/10" },
+  "Content Creator": { icon: <YoutubeIcon />, tone: "text-red border-red/30 bg-red/10" },
 };
 
 /** Icon tile with a light sweep that passes over it every few seconds. */
@@ -40,8 +40,8 @@ export function Achievements() {
       title={
         <span className="inline-flex items-center gap-3">
           Awards
-          <span className="relative inline-grid size-12 place-items-center overflow-hidden rounded-full border border-amber-400/40 bg-amber-400/10">
-            <Medal aria-hidden size={26} className="text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]" />
+          <span className="relative inline-grid size-12 place-items-center overflow-hidden rounded-full border border-amber/40 bg-amber/10">
+            <Medal aria-hidden size={26} className="text-amber drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]" />
             <span aria-hidden className="cup-shine pointer-events-none absolute inset-y-0 -left-full w-1/2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
           </span>
         </span>
@@ -65,7 +65,7 @@ export function Achievements() {
                   href={a.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-500 transition hover:bg-red-500/10"
+                  className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full border border-red/30 px-3 py-1.5 text-xs font-medium text-red transition hover:bg-red/10"
                 >
                   Visit channel <ArrowUpRight size={14} />
                 </a>

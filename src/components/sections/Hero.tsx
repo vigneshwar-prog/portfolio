@@ -46,7 +46,7 @@ function Portrait({ hasPortrait }: { hasPortrait: boolean }) {
 const stats: { value: string; label: string; title: string; icon: LucideIcon; tone: string }[] = [
   { value: profile.yearsExperience, title: "Experience", label: "years engineering", icon: Briefcase, tone: "text-green border-green/30 bg-green/10" },
   { value: "4", title: "Organisations", label: "Cisco · Zoho · Virtusa · PARO IT", icon: Building2, tone: "text-violet border-violet/30 bg-violet/10" },
-  { value: "3×", title: "Award", label: "Automation Genie", icon: Trophy, tone: "text-amber-400 border-amber-400/30 bg-amber-400/10" },
+  { value: "3×", title: "Award", label: "Automation Genie", icon: Trophy, tone: "text-amber border-amber/30 bg-amber/10" },
 ];
 
 /** Icon tile with a periodic light sweep (shared shine style from Awards). */
@@ -102,7 +102,7 @@ export function Hero({ hasPortrait, hasResume }: { hasPortrait: boolean; hasResu
                 aria-label={open ? "Close interactive terminal" : "Open interactive terminal"}
                 className={`group relative inline-flex items-center gap-2 overflow-hidden rounded-full border px-4 py-2 font-mono text-sm transition hover:scale-105 ${
                   open
-                    ? "border-red-500/60 bg-red-500/10 text-red-400 shadow-[0_0_18px_rgba(239,68,68,0.4)] hover:border-red-500 hover:shadow-[0_0_30px_rgba(239,68,68,0.65)]"
+                    ? "border-red/60 bg-red/10 text-red shadow-[0_0_18px_rgba(239,68,68,0.4)] hover:border-red hover:shadow-[0_0_30px_rgba(239,68,68,0.65)]"
                     : "border-green/50 bg-green/10 text-green shadow-[0_0_18px_rgba(62,230,154,0.35)] hover:border-green hover:shadow-[0_0_30px_rgba(62,230,154,0.6)]"
                 }`}
               >

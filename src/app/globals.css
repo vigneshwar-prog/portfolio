@@ -3,16 +3,18 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --bg: #f7f7f5;
+  --bg: #f4f4f1;
   --bg-elev: #ffffff;
-  --fg: #0d0f12;
-  --muted: #5b6068;
-  --line: rgba(13, 15, 18, 0.08);
-  --line-strong: rgba(13, 15, 18, 0.16);
-  --green: #0f9d63;
-  --cyan: #0891b2;
-  --violet: #6d4fd6;
-  --grid: rgba(13, 15, 18, 0.05);
+  --fg: #07080a;
+  --muted: #3f444c;
+  --line: rgba(7, 8, 10, 0.12);
+  --line-strong: rgba(7, 8, 10, 0.24);
+  --green: #047a4a;
+  --cyan: #0e6f8c;
+  --violet: #5534c4;
+  --amber: #b45309;
+  --red: #c81e1e;
+  --grid: rgba(7, 8, 10, 0.06);
 }
 
 .dark {
@@ -25,6 +27,8 @@
   --green: #3ee69a;
   --cyan: #38d6f5;
   --violet: #a48bff;
+  --amber: #fbbf24;
+  --red: #f87171;
   --grid: rgba(255, 255, 255, 0.035);
 }
 
@@ -38,6 +42,8 @@
   --color-green: var(--green);
   --color-cyan: var(--cyan);
   --color-violet: var(--violet);
+  --color-amber: var(--amber);
+  --color-red: var(--red);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
@@ -117,3 +123,8 @@ body {
   100% { transform: translateX(400%) skewX(-20deg); }
 }
 .cup-shine { animation: cup-shine 3.5s ease-in-out infinite; }
+
+/* Terminal block cursor */
+@keyframes term-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.term-cursor { animation: term-blink 1.05s step-end infinite; }
+#term-input:focus, #term-input:focus-visible, #term-notes:focus, #term-notes:focus-visible { outline: none; }

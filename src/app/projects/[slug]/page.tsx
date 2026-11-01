@@ -25,10 +25,10 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
-function Block({ label, children }: { label: string; children: React.ReactNode }) {
+function Block({ label, children, wide }: { label: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <Reveal>
-      <section className="grid gap-4 border-t border-line py-12 md:grid-cols-[220px_1fr] md:gap-10">
+      <section className={`grid gap-4 border-t border-line py-12 md:gap-10 ${wide ? "" : "md:grid-cols-[220px_1fr]"}`}>
         <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">{label}</h2>
         <div>{children}</div>
       </section>
@@ -85,7 +85,7 @@ export default async function ProjectPage({ params }: Params) {
         <Block label="Solution">
           <p className="text-lg leading-relaxed">{p.solution}</p>
         </Block>
-        <Block label="Architecture">
+        <Block label="Architecture" wide>
           <FlowDiagram project={p} />
           <ul className="mt-6 space-y-3">
             {p.architecture.notes.map((n) => (
