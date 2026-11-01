@@ -3,10 +3,8 @@ title: "Redis and Celery, explained"
 summary: "Moving slow work out of the request cycle: brokers, workers, retries and idempotency."
 date: "2026-08-20"
 category: "Backend"
-draft: true
+draft: false
 ---
-
-> **Sample draft.** This post is a placeholder outline and has not been published.
 
 ## Why background workers
 
@@ -17,9 +15,3 @@ Requests should be fast. Anything slow — SSH sessions, reports, emails — bel
 - **Broker** (Redis): holds queued tasks.
 - **Workers** (Celery): pull tasks and run them.
 - **Result backend**: optional storage of results.
-
-## Outline still to write
-
-- Retries and idempotent tasks
-- Rate limiting per downstream resource
-- Periodic tasks with Celery beat

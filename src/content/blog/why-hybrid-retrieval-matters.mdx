@@ -3,10 +3,8 @@ title: "Why hybrid retrieval matters"
 summary: "Semantic search alone misses exact identifiers; keyword search alone misses meaning. Combining them fixes both."
 date: "2026-09-12"
 category: "AI"
-draft: true
+draft: false
 ---
-
-> **Sample draft.** This post is a placeholder outline and has not been published.
 
 ## The failure modes
 
@@ -27,9 +25,3 @@ def rrf(rankings, k=60):
             scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank + 1)
     return sorted(scores, key=scores.get, reverse=True)
 ```
-
-## Outline still to write
-
-- Choosing the fusion constant
-- Where reranking fits
-- Evaluating recall
