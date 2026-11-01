@@ -110,3 +110,10 @@ body {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Trophy shine sweep */
+@keyframes cup-shine {
+  0%, 70% { transform: translateX(0) skewX(-20deg); }
+  100% { transform: translateX(400%) skewX(-20deg); }
+}
+.cup-shine { animation: cup-shine 3.5s ease-in-out infinite; }

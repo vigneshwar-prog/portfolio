@@ -19,9 +19,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "reading-time": "^1.5.0",
-    "remark-gfm": "^4.0.1",
-    "resend": "^6.37.0",
-    "zod": "^4.6.7"
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
