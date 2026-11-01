@@ -1,17 +1,148 @@
 ---
 title: "Redis and Celery, explained"
-summary: "Moving slow work out of the request cycle: brokers, workers, retries and idempotency."
+summary: "Moving slow network work out of the request cycle: how Redis and Celery power a device-management platform — brokers, workers, retries, idempotency, routing and live progress."
 date: "2026-08-20"
 category: "Backend"
 draft: false
 ---
 
-## Why background workers
+The network device management platform I built lets engineers run commands, collect configs and check health across many routers and switches from a web UI. Every one of those actions means opening an **SSH session** to a real device — slow, unpredictable, and sometimes hanging for a long time. This post explains why that work lives in Celery workers backed by Redis, and the details that made it reliable.
 
-Requests should be fast. Anything slow — SSH sessions, reports, emails — belongs in a worker.
+## Why not just do it in the request?
+
+A web request should finish in milliseconds. An SSH session to a network device:
+
+- takes 1–5 seconds just to connect and authenticate;
+- can run for minutes when collecting `show tech` or full configs;
+- can hang on an unreachable device until a timeout fires;
+- multiplies — "collect configs from 200 devices" is 200 sessions.
+
+Doing that inside the HTTP request ties up a server worker per device, hits proxy timeouts (often 30–60 s), and loses all progress if the user closes the tab. The fix is to **accept the request, queue the work, return immediately**, and let background workers do it.
 
 ## The moving parts
 
-- **Broker** (Redis): holds queued tasks.
-- **Workers** (Celery): pull tasks and run them.
-- **Result backend**: optional storage of results.
+```text
+ Browser ──POST /jobs──▶ Web API ──enqueue──▶ Redis (broker)
+    ▲                       │                     │
+    │                  returns job_id             ▼
+    └──poll / websocket── status ◀── Redis (results) ◀── Celery workers ──SSH──▶ devices
+```
+
+- **Broker (Redis)** — a queue holding task messages: task name, arguments, ID.
+- **Workers (Celery)** — long-running processes that pull messages and execute them.
+- **Result backend (Redis)** — stores each task's state (`PENDING`, `STARTED`, `SUCCESS`, `FAILURE`) and return value.
+- **Web API** — only enqueues and reads status; it never touches a device.
+
+Redis fits both roles well here: it is in-memory and fast, simple to run, and its keys can expire, so old results clean themselves up.
+
+## A task
+
+```python
+from celery import Celery
+from netmiko import ConnectHandler
+from netmiko.exceptions import NetmikoTimeoutException
+
+app = Celery("netops", broker="redis://redis:6379/0", backend="redis://redis:6379/1")
+app.conf.update(
+    task_acks_late=True,            # ack only after the task finishes
+    task_reject_on_worker_lost=True,
+    worker_prefetch_multiplier=1,   # don't hoard long tasks
+    result_expires=60 * 60 * 24,
+    task_time_limit=600,            # hard kill
+    task_soft_time_limit=540,       # raise inside the task first
+)
+
+@app.task(bind=True, autoretry_for=(NetmikoTimeoutException,),
+          retry_backoff=True, retry_backoff_max=120, max_retries=3)
+def run_command(self, device_id: str, command: str) -> dict:
+    device = load_device(device_id)
+    self.update_state(state="PROGRESS", meta={"step": "connecting"})
+    with ConnectHandler(**device.connection_params()) as conn:
+        self.update_state(state="PROGRESS", meta={"step": "running"})
+        output = conn.send_command(command, read_timeout=120)
+    return {"device_id": device_id, "output": output}
+```
+
+Each setting exists because of a real failure mode:
+
+- **`task_acks_late`** — by default Celery acknowledges a message when a worker *receives* it. If the worker crashes mid-SSH, the task is lost. Late acks mean it is re-delivered.
+- **`worker_prefetch_multiplier=1`** — workers normally prefetch several tasks. With minute-long tasks, one worker would hoard a batch while others sit idle.
+- **Soft and hard time limits** — the soft limit raises `SoftTimeLimitExceeded` so the task can close the session cleanly; the hard limit kills a truly stuck process.
+- **Exponential backoff retries** — transient timeouts (a busy device, a flapping link) usually succeed on retry; backoff avoids hammering the device.
+
+## Idempotency: retries must be safe
+
+Late acks and retries mean **a task can run more than once**. For a `show` command that is harmless. For a configuration push it is not — applying a change twice, or half-applying then retrying, can leave a device in a bad state.
+
+Rules I followed:
+
+- **Read-only tasks** are retried freely.
+- **Write tasks** take an idempotency key (`job_id + device_id`). Before running, the task checks Redis with `SET key NX EX` — if the key exists, the work is already done or in progress and the task exits.
+- **Config pushes** compare the running config against the intended state first, and only apply the diff. Re-running a converged change does nothing.
+
+```python
+def acquire_once(r, key: str, ttl: int = 3600) -> bool:
+    return bool(r.set(f"idem:{key}", "1", nx=True, ex=ttl))
+```
+
+## Fan-out with groups and chords
+
+"Collect configs from 200 devices" is one user action but 200 tasks. Celery primitives express this directly:
+
+```python
+from celery import group, chord
+
+job = chord(
+    group(collect_config.s(d) for d in device_ids),
+    build_report.s(job_id),   # runs once, with all results
+)
+job.apply_async()
+```
+
+The devices are processed in parallel up to the worker concurrency, and the report is built once everything has finished. A single device failing does not fail the batch: each task catches its own errors and returns a structured `{"status": "failed", "error": ...}` result, so the report can show which devices failed and why.
+
+## Queues and concurrency
+
+Not all work is equal. A quick health check should not wait behind a 10-minute config backup. Tasks are **routed to separate queues**, each with its own workers:
+
+```python
+app.conf.task_routes = {
+    "netops.run_command":   {"queue": "interactive"},
+    "netops.collect_config": {"queue": "bulk"},
+}
+```
+
+```bash
+celery -A netops worker -Q interactive --concurrency=8
+celery -A netops worker -Q bulk --concurrency=16
+```
+
+SSH work spends nearly all its time waiting on the network, so it is **I/O-bound**: high concurrency per worker is cheap. The real limit is the devices themselves — many platforms allow only a handful of concurrent VTY sessions, so per-device concurrency is capped with a short-lived Redis lock per device.
+
+## Live progress in the UI
+
+Because tasks call `update_state`, the API can report progress without touching the worker:
+
+```python
+from celery.result import AsyncResult
+
+def job_status(task_id: str) -> dict:
+    res = AsyncResult(task_id, app=app)
+    return {"state": res.state, "info": res.info if isinstance(res.info, dict) else None}
+```
+
+The front end polls this (or receives it over a websocket), so users see *connecting → running → done* per device instead of a spinner.
+
+## Operating it
+
+- **Monitoring** — Flower shows queue depth, task rates and failures; a growing queue means workers are under-provisioned or devices are slow.
+- **Secrets** — device credentials are fetched by the worker at run time, never put into task arguments, because task messages sit in Redis in plain text.
+- **Graceful deploys** — workers get a warm shutdown signal so running SSH sessions finish before the process exits; with late acks anything interrupted is re-queued.
+
+## Takeaways
+
+- Anything slow or unpredictable — SSH, reports, emails — belongs in a worker, not the request.
+- Redis is a simple, fast broker and result store; set expiries so results don't pile up.
+- Use **late acks, prefetch 1 and time limits** for long tasks.
+- Assume every task can run twice: make writes **idempotent**.
+- Separate **queues** by latency class, and respect the limits of the systems you call.

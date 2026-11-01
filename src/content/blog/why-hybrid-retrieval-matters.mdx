@@ -1,27 +1,107 @@
 ---
 title: "Why hybrid retrieval matters"
-summary: "Semantic search alone misses exact identifiers; keyword search alone misses meaning. Combining them fixes both."
+summary: "Semantic search misses exact identifiers; keyword search misses meaning. How combining dense, sparse and metadata retrieval with Reciprocal Rank Fusion fixed both in an employee RAG assistant."
 date: "2026-09-12"
 category: "AI"
 draft: false
 ---
 
-## The failure modes
+When I first built the employee-information assistant, retrieval was a single call: embed the question, take the top-k nearest cards from Chroma. Demos looked great. Real questions did not. This post covers the failures, why they happen at the vector level, and the hybrid setup that fixed them.
 
-| Query | Semantic only | Keyword only |
-| --- | --- | --- |
-| "EMP-1042" | weak | strong |
-| "people who know ML" | strong | weak |
+## How dense retrieval actually fails
 
-## Combining scores
+A sentence embedding model like `all-MiniLM-L6-v2` compresses a whole card into 384 numbers that capture *meaning*. That is exactly why it struggles with tokens that carry no meaning:
 
-Run both retrievers, merge with reciprocal rank fusion, then apply **metadata filters** for hard constraints.
+- **Identifiers.** `EMP-1042` and `EMP-1024` are nearly identical to the tokenizer — both split into sub-word pieces like `emp`, `-`, `10`, `42`. Their vectors are close, so the wrong employee can rank first.
+- **Rare proper nouns.** Internal tool names or project codenames are unseen during training and get weak, generic embeddings.
+- **Constraints.** "in Bangalore" shifts the query vector slightly towards Bangalore, but a strong skills match from Chennai can still win. Similarity is a *preference*, never a *rule*.
+- **Negation and counting.** "Who does *not* know Java" embeds close to "who knows Java".
+
+## How keyword retrieval fails
+
+Sparse retrieval (BM25) scores documents by exact term overlap, weighted by how rare each term is. It is excellent at `EMP-1042` and terrible at:
+
+- **Synonyms** — "ML" vs "machine learning", "k8s" vs "Kubernetes".
+- **Intent** — "who could help debug a model deployment?" shares almost no words with a card listing "MLOps, Docker, FastAPI".
+
+| Query | Dense (semantic) | Sparse (BM25) | Metadata filter |
+| --- | --- | --- | --- |
+| "EMP-1042" | weak — near-duplicate IDs | strong | strong (exact) |
+| "people who know ML" | strong | weak — misses "machine learning" | n/a |
+| "Kubernetes engineers in Bangalore" | partial — location is soft | partial | enforces location |
+| "help with a model deployment" | strong | weak | n/a |
+
+Every column has a weak row. That is the whole argument for hybrid.
+
+## The retrieval design
+
+For each sub-query produced by the router:
+
+1. **Metadata extraction.** The router returns structured constraints as JSON, e.g. `{"location": "Bangalore", "team": null}`. These become a Chroma `where` filter.
+2. **Dense search** over embeddings, *with* the filter applied, so semantic ranking only happens inside the allowed set.
+3. **Exact / keyword search** for identifiers and rare terms — a regex check for ID patterns plus BM25 over card text.
+4. **Fusion** of the ranked lists with Reciprocal Rank Fusion.
 
 ```python
-def rrf(rankings, k=60):
-    scores = {}
+import re
+from rank_bm25 import BM25Okapi
+
+ID_PATTERN = re.compile(r"\bEMP-\d{3,}\b", re.I)
+
+def dense_search(store, query, where, k=10):
+    docs = store.similarity_search(query, k=k, filter=where or None)
+    return [d.metadata["employee_id"] for d in docs]
+
+def keyword_search(bm25, ids, query, k=10):
+    exact = [m.upper() for m in ID_PATTERN.findall(query)]
+    scores = bm25.get_scores(query.lower().split())
+    ranked = [ids[i] for i in sorted(range(len(ids)), key=lambda i: -scores[i])[:k]]
+    return exact + [r for r in ranked if r not in exact]
+```
+
+Exact ID matches are put at the top of the keyword list because, if a user typed an ID, that record is almost certainly what they want.
+
+### Filter first or filter after?
+
+Applying the metadata filter **inside** the vector search (pre-filtering) matters. If you take the global top-10 and filter afterwards, a query like "Go developers in Pune" can come back empty: the ten nearest Go developers were all in other cities. Pre-filtering searches only Pune and returns the best ten there.
+
+The trade-off: if the router extracts a wrong constraint, pre-filtering hides the right answer. I handle that by falling back to an unfiltered search when the filtered one returns nothing, and telling the user the constraint was relaxed.
+
+## Reciprocal Rank Fusion
+
+Dense scores are cosine similarities (roughly 0.2–0.8), BM25 scores are unbounded, and an exact match has no score at all. Adding them requires normalisation that breaks whenever the distribution shifts. RRF ignores scores and uses only **rank**:
+
+```python
+def rrf(rankings: list[list[str]], k: int = 60) -> list[str]:
+    scores: dict[str, float] = {}
     for ranking in rankings:
         for rank, doc_id in enumerate(ranking):
-            scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank + 1)
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
     return sorted(scores, key=scores.get, reverse=True)
 ```
+
+Each document gets `1 / (k + rank)` from every list it appears in. Two properties make this work well:
+
+- **Agreement wins.** A card ranked 3rd by both retrievers (≈ 0.0317) beats one ranked 1st by only one (≈ 0.0164).
+- **`k` damps the head.** With `k = 60` the gap between rank 1 and rank 5 is small, so one retriever's overconfident top hit cannot dominate. A smaller `k` trusts top ranks more — useful when one retriever is very precise.
+
+`k = 60` comes from the original RRF paper and was a good default here; I only tuned it after the evaluation loop was in place.
+
+## Multi-intent queries
+
+"Who knows Terraform in Bangalore, and who leads the platform team?" is two searches. The router splits it, each sub-query runs the full hybrid pipeline, and results are kept **grouped by sub-query** in the prompt, so the model answers each part from its own evidence instead of blending them.
+
+## What changed in practice
+
+Measured with the LLM-as-judge set described in *Understanding RAG architecture*:
+
+- ID lookups went from occasionally returning a neighbouring employee to consistently correct.
+- Location/team questions stopped leaking people from outside the constraint.
+- Synonym-heavy questions kept the quality they had with dense-only search, because the dense list still contributes.
+
+## Takeaways
+
+- Dense retrieval understands meaning but blurs identifiers and treats constraints as suggestions.
+- Sparse retrieval nails exact terms but misses paraphrase.
+- Hard constraints belong in **metadata filters**, applied before ranking — with a fallback.
+- **RRF** merges lists without fighting incompatible score scales, and rewards agreement.

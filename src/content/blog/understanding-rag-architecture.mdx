@@ -1,19 +1,145 @@
 ---
 title: "Understanding RAG architecture"
-summary: "Ingestion, chunking, retrieval and generation — the parts of a RAG system and the decisions behind each."
+summary: "Ingestion, chunking, retrieval, routing, generation and evaluation — the parts of a production RAG system and the decisions behind each, from building one over structured employee data."
 date: "2026-10-05"
 category: "AI"
 draft: false
 ---
 
-## The pipeline
+Retrieval-Augmented Generation (RAG) sounds simple: find relevant text, paste it into a prompt, let the model answer. In practice almost every quality problem in a RAG system is a **retrieval** problem, not a model problem. If the right context never reaches the prompt, no model can recover it.
 
-1. **Ingest** — load and normalise sources.
-2. **Chunk** — split into retrievable units.
-3. **Embed & index** — store vectors with metadata.
-4. **Retrieve** — find the most relevant chunks.
-5. **Generate** — answer grounded in retrieved context.
+This post walks through the architecture I used for an employee-information assistant built on structured Excel data, and the reasoning behind each stage.
 
-## Chunking is a modelling decision
+## The pipeline at a glance
 
-For structured data, one entity per chunk (a "card") beats fixed-length windows because every retrieved unit is complete.
+1. **Ingest** — load and normalise the source data.
+2. **Chunk** — decide what a single retrievable unit is.
+3. **Embed & index** — turn units into vectors and store them with metadata.
+4. **Route** — work out what kind of question was asked.
+5. **Retrieve** — find candidates using more than one strategy.
+6. **Fuse & rerank** — merge candidate lists into one ordering.
+7. **Generate** — answer strictly from retrieved context.
+8. **Evaluate** — measure answer quality so changes are not guesswork.
+
+The stack: Python, LangChain, Chroma as the vector store, `all-MiniLM-L6-v2` for embeddings, a Streamlit UI, and an LLM served through a local, Claude-compatible gateway so employee data never leaves the environment.
+
+## 1. Ingestion: clean data is retrieval quality
+
+Spreadsheets look structured, but they are messy in ways that hurt retrieval:
+
+- Column names differ between sheets (`Emp ID`, `Employee Id`, `ID`).
+- Cells mix formats — `ML, Python` in one row, `Machine Learning / Python` in another.
+- Empty cells, merged cells and trailing whitespace.
+
+Ingestion normalises all of this **before** anything is embedded: canonical column names, trimmed values, consistent separators for multi-value fields, and dropped empty fields. Every inconsistency left here becomes a retrieval miss later.
+
+## 2. Chunking is a modelling decision
+
+The default advice — split text into fixed windows of N tokens with some overlap — works for long prose. It fails badly for tabular data.
+
+A fixed-size window over flattened rows will:
+
+- **split one employee across two chunks**, so a query retrieves half a record;
+- **merge two employees into one chunk**, so the model attributes one person's skills to another.
+
+The second failure is the dangerous one: the answer *looks* correct and is confidently wrong.
+
+The fix is **card-based chunking** — one self-contained document per entity:
+
+```text
+Name: Priya Sharma
+Employee ID: EMP-1042
+Team: Platform Engineering
+Location: Bangalore
+Skills: Kubernetes, Go, Terraform
+Projects: Internal developer platform
+```
+
+Every retrieved unit is now complete and unambiguous. Card size is naturally bounded by the number of columns, so there is no window size to tune.
+
+### Embedded text vs metadata
+
+Not every field belongs in the embedded text. A useful split:
+
+| Field type | Store as | Why |
+| --- | --- | --- |
+| Free text (skills, projects, role) | Embedded text | Needs semantic matching |
+| Exact identifiers (ID, email) | Embedded text **and** metadata | Exact lookups and filters |
+| Categorical (team, location, level) | Metadata | Hard constraints, not similarity |
+
+Putting a location like "Bangalore" only in the embedding makes it a *soft* signal — similar cities can outrank it. As metadata it becomes a *hard* filter.
+
+## 3. Embedding and indexing
+
+`all-MiniLM-L6-v2` produces 384-dimensional vectors and runs quickly on CPU. For short cards it is a good trade-off: cheap, private and fast to re-index. Its weaker precision is compensated later by fusion and reranking.
+
+```python
+from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+store = Chroma.from_texts(
+    texts=[card.text for card in cards],
+    metadatas=[card.metadata for card in cards],
+    ids=[card.employee_id for card in cards],
+    embedding=embeddings,
+    collection_name="employees",
+)
+```
+
+Using the employee ID as the document ID makes re-ingestion idempotent: updating a row replaces its card instead of duplicating it.
+
+## 4. Routing: not every question is a search
+
+Users ask very different kinds of questions:
+
+- **Lookup** — "What team is EMP-1042 in?"
+- **Filter** — "Who in Bangalore knows Kubernetes?"
+- **Open-ended** — "Who could help with an ML deployment problem?"
+- **Multi-intent** — "Who knows Terraform in Bangalore, and who leads the platform team?"
+
+An **LLM-as-router** classifies the query and, for multi-intent questions, **decomposes** it into sub-queries. Each sub-query is retrieved independently and the results are combined. Without decomposition, a single embedding of a two-part question lands somewhere between both intents and matches neither well.
+
+The router also extracts structured constraints (location, team) so they can become metadata filters instead of fuzzy text.
+
+## 5. Hybrid retrieval
+
+For each (sub-)query, two retrievers run:
+
+- **Semantic search** over embeddings — handles paraphrase ("ML" ≈ "machine learning").
+- **Metadata-filtered search** — enforces hard constraints and exact identifiers.
+
+Neither is enough alone; the next post, *Why hybrid retrieval matters*, covers the failure modes in detail.
+
+## 6. Fusion with Reciprocal Rank Fusion
+
+Two retrievers produce two ranked lists with scores on different scales — cosine similarity versus a filter match. Normalising and adding raw scores is fragile. **Reciprocal Rank Fusion (RRF)** ignores scores and uses only rank positions, which makes it robust and parameter-light. It is covered with code in the hybrid retrieval post.
+
+## 7. Grounded generation and guardrails
+
+The prompt instructs the model to answer **only** from the provided cards and to say when the answer is not present. A few guardrails make that stick:
+
+- **Cite the source card** for every fact, so answers are verifiable.
+- **Refuse on empty retrieval** instead of letting the model improvise.
+- **Keep context small** — a handful of complete cards beats dozens of partial ones.
+
+In-session conversational memory lets users ask follow-ups ("what about their projects?") without repeating who "they" are, while each turn still goes through retrieval.
+
+## 8. Evaluation: LLM-as-judge
+
+The hardest part of RAG is knowing whether a change actually helped. An **LLM-as-judge** loop scores answers against the retrieved context on criteria such as:
+
+- **Faithfulness** — is every claim supported by the cards?
+- **Relevance** — does it answer the question asked?
+- **Completeness** — did it miss people who match?
+
+Running a fixed set of test questions through the judge after each change — new chunking rule, different fusion constant, new router prompt — turns tuning from intuition into measurement.
+
+## Takeaways
+
+- Most RAG quality problems are retrieval problems.
+- For structured data, **chunk by entity**, not by length.
+- Put hard constraints in **metadata**, not in embeddings.
+- **Route and decompose** queries before retrieving.
+- Combine retrievers with **RRF**, and **evaluate** every change.
