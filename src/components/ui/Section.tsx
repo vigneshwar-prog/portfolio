@@ -19,7 +19,7 @@ export function Section({
   className?: string;
 }) {
   return (
-    <section id={id} className={cn("relative mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 md:py-32", className)}>
+    <section id={id} className={cn("relative mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 md:py-32", className)}>
       <Reveal>
         <p className="mb-4 font-mono text-xs uppercase tracking-[0.2em] text-green">
           <span className="text-muted">{"// "}</span>

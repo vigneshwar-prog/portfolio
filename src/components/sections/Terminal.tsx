@@ -8,19 +8,20 @@ import { skillGroups } from "@/content/skills";
 type Line = { kind: "in" | "out"; text: string };
 
 const COMMANDS: Record<string, () => string> = {
-  help: () => "Available: whoami, about, skills, projects, contact, clear",
-  whoami: () => `${profile.name} — ${profile.designation} @ ${profile.company}, ${profile.location}`,
-  about: () => profile.about[1],
+  help: () => "Available: whoami, about, skills, projects, education, contact, clear",
+  whoami: () => `${profile.name} — ${profile.designation} @ ${profile.company}, ${profile.location}\n${profile.intro}`,
+  about: () => profile.about.join("\n\n"),
   skills: () => skillGroups.map((g) => `${g.title}: ${g.skills.map((s) => s.name).join(", ")}`).join("\n"),
   projects: () => projects.map((p) => `→ ${p.title}  (/projects/${p.slug})`).join("\n"),
+  education: () => profile.education,
   contact: () => "Scroll to the contact section, or type `goto contact`.",
 };
 
 const SUGGESTED = ["whoami", "projects", "skills"];
 
-export function Terminal() {
+export function Terminal({ height = "h-72", onClose, className = "" }: { height?: string; onClose?: () => void; className?: string }) {
   const [lines, setLines] = useState<Line[]>([
-    { kind: "out", text: "Welcome. Type `help` or tap a command below." },
+    { kind: "out", text: "Welcome! Try typing `whoami` and press Enter — or tap a command below." },
   ]);
   const [value, setValue] = useState("");
   const [history, setHistory] = useState<string[]>([]);
@@ -50,14 +51,23 @@ export function Terminal() {
   };
 
   return (
-    <div className="card overflow-hidden font-mono text-[13px]" onClick={() => inputRef.current?.focus({ preventScroll: true })}>
+    <div className={`card flex flex-col overflow-hidden font-mono text-[13px] ${className}`} onClick={() => inputRef.current?.focus({ preventScroll: true })}>
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <span className="size-2.5 rounded-full bg-[#ff5f57]" />
+        {onClose ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            aria-label="Close terminal"
+            className="size-2.5 rounded-full bg-[#ff5f57] ring-offset-2 transition hover:scale-125"
+          />
+        ) : (
+          <span className="size-2.5 rounded-full bg-[#ff5f57]" />
+        )}
         <span className="size-2.5 rounded-full bg-[#febc2e]" />
         <span className="size-2.5 rounded-full bg-[#28c840]" />
         <span className="ml-3 text-xs text-muted">vigneshwar@portfolio: ~</span>
       </div>
-      <div ref={bodyRef} className="h-72 overflow-y-auto px-4 py-4 leading-relaxed" aria-live="polite">
+      <div ref={bodyRef} className={`${height} min-h-0 overflow-y-auto px-4 py-4 leading-relaxed`} aria-live="polite">
         {lines.map((l, i) => (
           <pre key={i} className={`whitespace-pre-wrap break-words font-mono ${l.kind === "in" ? "text-fg" : "text-muted"}`}>
             {l.kind === "in" && <span className="text-green">❯ </span>}

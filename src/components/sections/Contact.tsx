@@ -47,14 +47,15 @@ export function Contact({ hasResume }: { hasResume: boolean }) {
       eyebrow="Contact"
       title={
         <>
-          Let&apos;s build something <span className="font-serif font-normal italic text-gradient">Useful.</span>
+          Let&apos;s build something <span className="font-serif font-normal italic text-gradient">together.</span>
         </>
       }
       intro="Open to Software, Backend and AI Engineering roles."
     >
       <Reveal>
-        <div className="max-w-xl">
+        <div className="grid gap-4 md:grid-cols-2">
           <CopyCard label="email" value={profile.email} href={`mailto:${profile.email}`} />
+          <CopyCard label="phone" value={profile.phone} href={`tel:${profile.phone.replace(/\s/g, "")}`} />
         </div>
         <div className="mt-8 flex flex-wrap gap-3">
           <a href={`mailto:${profile.email}`} className={`${btn} bg-green text-bg hover:opacity-90`}>

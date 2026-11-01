@@ -32,7 +32,7 @@ export function SocialLinks({ className = "" }: { className?: string }) {
 export function Footer() {
   return (
     <footer className="border-t border-line">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-12 sm:px-6 md:flex-row md:items-center md:justify-between">
+      <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-12 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="font-medium">{profile.name}</p>
           <p className="mt-1 text-sm text-muted">{profile.tagline}</p>
@@ -49,7 +49,7 @@ export function Footer() {
         <SocialLinks />
       </div>
       <p className="pb-10 text-center font-mono text-xs text-muted">
-        © {new Date().getFullYear()} {profile.name} · Built with Next.js
+        © {new Date().getFullYear()} {profile.name}
       </p>
     </footer>
   );
