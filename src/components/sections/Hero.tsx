@@ -5,7 +5,6 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Download, MapPin, MessageSquare } from "lucide-react";
 import { profile } from "@/content/profile";
 import { ButtonLink } from "@/components/ui/ButtonLink";
-import { NetworkBackground } from "@/components/ui/NetworkBackground";
 import { SocialLinks } from "@/components/layout/Footer";
 
 function Portrait({ hasPortrait }: { hasPortrait: boolean }) {
@@ -64,9 +63,6 @@ export function Hero({ hasPortrait, hasResume }: { hasPortrait: boolean; hasResu
 
   return (
     <section className="relative flex min-h-[100svh] items-center overflow-hidden pt-16">
-      <div aria-hidden className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]">
-        <NetworkBackground />
-      </div>
       <div aria-hidden className="pointer-events-none absolute -top-40 left-1/2 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--green)_14%,transparent),transparent)] blur-2xl" />
 
       <div className="relative mx-auto grid w-full max-w-6xl items-center gap-14 px-4 py-16 sm:px-6 md:grid-cols-[1.35fr_1fr] md:py-24">

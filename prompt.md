@@ -416,7 +416,6 @@ Implement proper server-side validation, spam protection and secure email delive
 
 Do not expose API keys or SMTP credentials in frontend code.
 
-
 # 16. Functional Requirements
 
 The website must:

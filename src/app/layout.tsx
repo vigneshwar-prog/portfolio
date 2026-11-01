@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { NetworkBackground } from "@/components/ui/NetworkBackground";
 import { profile } from "@/content/profile";
 import "./globals.css";
 
@@ -53,9 +54,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={`${sans.variable} ${mono.variable} ${serif.variable} font-sans`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+          {/* Site-wide animated network background, fixed behind all content */}
+          <div aria-hidden className="pointer-events-none fixed inset-0 z-0 [mask-image:radial-gradient(ellipse_at_center,black_45%,transparent_100%)]">
+            <NetworkBackground />
+          </div>
           <Navbar />
-          <main id="main">{children}</main>
-          <Footer />
+          <main id="main" className="relative z-10">{children}</main>
+          <div className="relative z-10">
+            <Footer />
+          </div>
         </ThemeProvider>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </body>
