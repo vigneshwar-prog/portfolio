@@ -136,6 +136,18 @@ The hardest part of RAG is knowing whether a change actually helped. An **LLM-as
 
 Running a fixed set of test questions through the judge after each change — new chunking rule, different fusion constant, new router prompt — turns tuning from intuition into measurement.
 
+The test set is a list of questions with the **expected employee IDs**, covering each intent type plus tricky cases (near-duplicate IDs, synonyms, constraints that match nobody). That gives two kinds of score:
+
+- **Retrieval scores, no LLM needed** — recall@k: did the expected IDs appear in the retrieved cards? This isolates retrieval from generation, and it is cheap to run on every change.
+- **Answer scores from the judge** — each criterion graded 1–5 with a short justification, as JSON.
+
+```python
+def recall_at_k(retrieved: list[str], expected: set[str], k: int = 5) -> float:
+    return len(expected & set(retrieved[:k])) / len(expected) if expected else 1.0
+```
+
+Splitting the two is what makes debugging possible: low recall means fix retrieval; high recall but low faithfulness means fix the prompt. A judge is itself a model and can be wrong, so I spot-check a sample of its grades by hand and keep the judge prompt fixed between runs so scores stay comparable.
+
 ## Takeaways
 
 - Most RAG quality problems are retrieval problems.
