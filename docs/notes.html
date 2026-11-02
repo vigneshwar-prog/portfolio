@@ -127,6 +127,15 @@
       <ul>
         <li><a href="#redis-like-counter"><span class="num">01</span>Like counter on Vercel</a></li>
         <li><a href="#redis-one-like"><span class="num">02</span>One like per visitor</a></li>
+        <li><a href="#redis-polling-load"><span class="num">03</span>Polling load on Redis</a></li>
+      </ul>
+      <div class="nav-group">Vercel</div>
+      <ul>
+        <li><a href="#vercel-cache"><span class="num">01</span>Serverless &amp; CDN cache</a></li>
+      </ul>
+      <div class="nav-group">Real-time UI</div>
+      <ul>
+        <li><a href="#rt-polling"><span class="num">01</span>Live count without refresh</a></li>
       </ul>
     </nav>
     <button class="theme-btn" id="theme" type="button">Toggle theme</button>
@@ -224,6 +233,106 @@ SET like:v:9f2c…e1 1 NX EX 31536000   <span class="c-red">→ nil</span>   <sp
 
         <h4>In one line</h4>
         <p>The server hashes IP + browser + a secret into a visitor ID, and Redis <code>SET NX</code> lets that ID add +1 only once a year.</p>
+      </section>
+      <section class="topic" id="redis-polling-load">
+        <div class="topic-head"><span class="pill">Redis · 03</span><h3>How much load polling puts on Redis</h3></div>
+
+        <h4>1. Reads vs writes</h4>
+        <p>Every visitor's button asks for the count every 10 seconds. That sounds like a lot of Redis traffic, but it splits into two very different kinds:</p>
+        <div class="table-wrap"><table>
+          <tr><th>Request</th><th>Redis commands</th><th>How often Redis sees it</th></tr>
+          <tr><td>GET (poll)</td><td><code>GET likes:site</code></td><td>At most once per 10s per Vercel region. The CDN answers everyone else (see Vercel · 01).</td></tr>
+          <tr><td>POST (like)</td><td>Lua script: <code>SET NX</code> + <code>INCR</code>, plus rate-limit commands</td><td>Every time, never cached. Rare: once per visitor.</td></tr>
+        </table></div>
+
+        <h4>2. The maths</h4>
+<pre><code><span class="c-m"># reads, worst case: a visitor polling every second of the month, one region</span>
+60/10 × 60 × 24 × 30  <span class="c-m">=</span> <span class="c-g">~259,200 GETs/month</span>
+
+<span class="c-m"># Upstash free tier</span>
+<span class="c-a">500,000 commands/month</span></code></pre>
+        <p>That's the ceiling whether 1 or 10,000 people have the tab open, because the cache, not the visitor count, decides how often Redis is hit. In practice it's far lower: when nobody is on the site, nothing is polled.</p>
+
+        <h4>3. Why GET is cheap for Redis anyway</h4>
+        <p><code>GET</code> on one key reads a value already in memory. It takes microseconds, and nothing is locked or rewritten. Even uncached, Redis could handle many thousands per second. The cache mainly saves the <em>free-tier command count</em> and the network trip, not Redis's CPU.</p>
+
+        <h4>In one line</h4>
+        <p>Polling reads are capped by the CDN cache at about one per 10s per region, so Redis load stays tiny no matter how many visitors are watching.</p>
+      </section>
+
+      <section class="topic" id="vercel-cache">
+        <div class="topic-head"><span class="pill">Vercel · 01</span><h3>Serverless functions and the CDN cache</h3></div>
+
+        <h4>1. What a serverless function is</h4>
+        <p>On Vercel, <code>/api/likes</code> isn't a server that's always running. It's a <strong>function</strong> that starts when a request arrives, answers and can be shut down soon after. Consequences:</p>
+        <ul>
+          <li><strong>No memory between requests:</strong> a variable like <code>let count = 0</code> resets whenever the function restarts. That's why the count lives in Redis.</li>
+          <li><strong>Several copies at once:</strong> under traffic Vercel runs many copies in parallel, each with its own memory.</li>
+          <li><strong>Short lives:</strong> functions have a time limit and are billed while running, so holding a connection open for minutes (WebSockets, long streams) is expensive or impossible.</li>
+        </ul>
+
+        <h4>2. The CDN cache in front of it</h4>
+        <p>Vercel puts a <strong>CDN</strong> (copies of responses stored in data centres near visitors) in front of every function. The function controls it with one response header:</p>
+<pre><code>Cache-Control: public, <span class="c-g">s-maxage=10</span>, <span class="c-a">stale-while-revalidate=60</span></code></pre>
+        <div class="table-wrap"><table>
+          <tr><th>Part</th><th>Meaning</th></tr>
+          <tr><td><code>public</code></td><td>The same answer can be shared by all visitors (fine for a total count).</td></tr>
+          <tr><td><code>s-maxage=10</code></td><td>The CDN may reuse the answer for 10 seconds without calling the function.</td></tr>
+          <tr><td><code>stale-while-revalidate=60</code></td><td>For up to 60s after that, the CDN serves the old answer instantly and refreshes it in the background.</td></tr>
+        </table></div>
+
+        <h4>3. What it looks like over time</h4>
+<pre><code>0s   visitor A → CDN empty → <span class="c-g">function → Redis</span> → 42   <span class="c-m">(stored)</span>
+3s   visitor B → CDN       → 42                       <span class="c-m">(no function call)</span>
+9s   visitor C → CDN       → 42
+12s  visitor D → CDN       → 42 (stale) + <span class="c-g">refresh in background</span> → 45
+14s  visitor E → CDN       → 45</code></pre>
+
+        <h4>4. Why the poll interval is 10 seconds</h4>
+        <p>The cached answer only changes every 10s, so polling faster just returns the same number. 10s matches <code>s-maxage</code>: it's the fastest interval that can show anything new.</p>
+
+        <h4>5. What must never be cached</h4>
+        <p>The POST (the like itself) changes data and returns a per-visitor answer, so it sends <code>Cache-Control: no-store</code>. Per-visitor info like "did <em>I</em> like it" can't go in the shared GET either, or one visitor's answer would be served to everyone. That's why "liked" is kept in the browser's localStorage.</p>
+
+        <h4>In one line</h4>
+        <p>Vercel functions are short-lived and stateless, and the CDN cache (<code>s-maxage</code>) lets thousands of visitors share one answer per 10 seconds.</p>
+      </section>
+
+      <section class="topic" id="rt-polling">
+        <div class="topic-head"><span class="pill">Real-time UI · 01</span><h3>Updating a count live without refreshing</h3></div>
+
+        <h4>1. Three ways to get updates from a server</h4>
+        <div class="table-wrap"><table>
+          <tr><th>Approach</th><th>How</th><th>Trade-off</th></tr>
+          <tr><td>Polling</td><td>The browser asks again every N seconds.</td><td>Simple, works anywhere, cacheable. Up to N seconds late.</td></tr>
+          <tr><td>Server-Sent Events</td><td>The browser opens one long HTTP response; the server writes a line whenever something changes.</td><td>Instant, one-way. Needs a long-running connection.</td></tr>
+          <tr><td>WebSockets</td><td>A permanent two-way connection.</td><td>Instant, both ways. Needs a server that stays up, or a paid service (Pusher, Ably).</td></tr>
+        </table></div>
+        <p>On serverless (see Vercel · 01) long connections are costly, and a like count doesn't need to be instant. Polling every 10 seconds is the right fit.</p>
+
+        <h4>2. The polling loop</h4>
+<pre><code><span class="c-g">setInterval</span>(() =&gt; {
+  <span class="c-g">if</span> (document.hidden || saving) <span class="c-g">return</span>;      <span class="c-m">// skip in background tabs / mid-like</span>
+  fetch(<span class="c-a">"/api/likes"</span>).then(r =&gt; r.json()).then(d =&gt;
+    setCount(c =&gt; Math.max(c, d.count))       <span class="c-m">// never go down</span>
+  );
+}, <span class="c-a">10_000</span>);</code></pre>
+
+        <h4>3. Pausing in hidden tabs</h4>
+        <p>The browser fires a <code>visibilitychange</code> event when a tab is hidden or shown, and <code>document.hidden</code> says which. The button stops polling when hidden (no point updating a number nobody sees) and checks <strong>immediately</strong> when the tab comes back, so the visitor never sees a stale count.</p>
+
+        <h4>4. Why the count takes the higher number</h4>
+        <p>Likes are never removed, so the true count only grows. But a poll can return a <strong>cached</strong> answer that's older than what the button already shows:</p>
+<pre><code>you like       → POST returns <span class="c-g">43</span>         <span class="c-m">(fresh)</span>
+next poll      → CDN still has <span class="c-red">42</span>       <span class="c-m">(cached before your like)</span>
+Math.max(43, 42) → <span class="c-g">43</span>                 <span class="c-m">no flicker back down</span></code></pre>
+        <p>The same idea is why polls are skipped while your own like is saving: a reply landing mid-save could undo the instant +1.</p>
+
+        <h4>5. Showing the change</h4>
+        <p>When a poll brings a higher number, a counter (<code>bump</code>) goes up. Using it as the React <code>key</code> remounts the number, so Framer Motion replays a slide-up, and the heart pulses. For visitors with reduced motion, the number just changes.</p>
+
+        <h4>In one line</h4>
+        <p>Poll every 10s while the tab is visible, keep the higher of local and server counts, and animate only when the number really grows.</p>
       </section>
     </div>
   </main>

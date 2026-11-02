@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ const FIRST_GLOW_MS = 1200; // first visit: glow 3 times shortly after load
 const GLOW_EVERY_MS = 8000; // then a single glow every few seconds
 
 const STORAGE_KEY = "site-liked";
+const POLL_MS = 10000; // re-check the shared count while the tab is visible
 
 /** Shared like count from /api/likes (Upstash Redis). One like per visitor; hidden if the API is unavailable. */
 export function LikeButton() {
@@ -27,6 +28,8 @@ export function LikeButton() {
   const [pop, setPop] = useState(0);
   const [nudging, setNudging] = useState(false);
   const [glow, setGlow] = useState<{ id: number; times: number } | null>(null);
+  const [bump, setBump] = useState(0); // someone else liked → small pulse
+  const busyRef = useRef(false);
   const reduce = useReducedMotion();
 
   useEffect(() => {
@@ -38,6 +41,43 @@ export function LikeButton() {
       .then((d: { count: number }) => setCount(d.count))
       .catch(() => setUnavailable(true));
   }, []);
+
+  // Live count: poll every POLL_MS while the tab is visible; check at once when it becomes visible again.
+  // Likes never go down, so keep the higher number (a cached reply may lag right after our own like).
+  useEffect(() => {
+    if (unavailable) return;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const check = () => {
+      if (busyRef.current || document.hidden) return;
+      fetch("/api/likes")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { count: number } | null) => {
+          if (!d || busyRef.current) return;
+          setCount((c) => {
+            if (c !== null && d.count > c) {
+              setBump((b) => b + 1);
+              return d.count;
+            }
+            return c ?? d.count;
+          });
+        })
+        .catch(() => {});
+    };
+    const start = () => {
+      clearInterval(timer);
+      if (!document.hidden) timer = setInterval(check, POLL_MS);
+    };
+    const onVisible = () => {
+      if (!document.hidden) check();
+      start();
+    };
+    start();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [unavailable]);
 
   // Now and then, shine the button and beat the heart — stops once the visitor has liked.
   useEffect(() => {
@@ -72,6 +112,7 @@ export function LikeButton() {
     if (liked || busy || count === null) return;
     const prev = count;
     setBusy(true);
+    busyRef.current = true;
     setLiked(true);
     setCount(prev + 1);
     setPop((p) => p + 1);
@@ -81,7 +122,7 @@ export function LikeButton() {
       const r = await fetch("/api/likes", { method: "POST" });
       if (!r.ok) throw new Error(String(r.status));
       const d: { count: number } = await r.json();
-      setCount(d.count);
+      setCount((c) => Math.max(c ?? 0, d.count));
       try {
         localStorage.setItem(STORAGE_KEY, "1");
       } catch {}
@@ -89,6 +130,7 @@ export function LikeButton() {
       setLiked(false);
       setCount(prev);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -128,9 +170,9 @@ export function LikeButton() {
           />
         )}
         <motion.span
-          key={liked ? `p${pop}` : `n${nudging}`}
+          key={liked ? `p${pop}b${bump}` : `n${nudging}b${bump}`}
           className="grid place-items-center"
-          initial={reduce || (pop === 0 && !nudging) ? false : { scale: 0.6 }}
+          initial={reduce || (pop === 0 && bump === 0 && !nudging) ? false : { scale: 0.6 }}
           animate={nudging && !reduce ? { scale: [1, 1.3, 1, 1.25, 1] } : { scale: 1 }}
           transition={
             nudging && !reduce
@@ -140,7 +182,17 @@ export function LikeButton() {
         >
           <Heart size={16} fill={liked ? "currentColor" : "none"} />
         </motion.span>
-        <span className="hidden min-w-[1ch] font-mono text-xs tabular-nums sm:inline">{shown}</span>
+        <span className="hidden overflow-hidden font-mono text-xs tabular-nums sm:inline-flex">
+          <motion.span
+            key={`c${bump}`}
+            className="min-w-[1ch]"
+            initial={reduce || bump === 0 ? false : { y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          >
+            {shown}
+          </motion.span>
+        </span>
       </button>
     </div>
   );
