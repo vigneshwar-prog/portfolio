@@ -9,6 +9,7 @@ import { useTheme } from "next-themes";
 import { nav, profile } from "@/content/profile";
 import { cn } from "@/lib/utils";
 import { AmbientAudio } from "@/components/ui/AmbientAudio";
+import { LikeButton } from "@/components/ui/LikeButton";
 
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
@@ -109,6 +110,7 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           <AmbientAudio />
           <ThemeToggle />
+          <LikeButton />
           <button
             type="button"
             className="grid size-9 place-items-center rounded-full border border-line md:hidden"

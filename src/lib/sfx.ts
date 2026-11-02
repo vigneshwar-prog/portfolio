@@ -68,3 +68,12 @@ export function playTerminalClose() {
   beep(c, t + 0.12, 330, 0.14, "sine", 0.05, 110);
   click(c, t + 0.26, 0.1);
 }
+
+/** Like: two quick rising sine notes. */
+export function playLike() {
+  const c = audio();
+  if (!c) return;
+  const t = c.currentTime + 0.01;
+  beep(c, t, 660, 0.09, "sine", 0.05, 990);
+  beep(c, t + 0.08, 1320, 0.14, "sine", 0.04);
+}

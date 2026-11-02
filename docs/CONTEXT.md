@@ -33,15 +33,15 @@ Goal: a fast, premium developer portfolio with a dark developer/terminal look, h
 | Icons | `lucide-react` (`components/ui/Icon.tsx` maps names to icons). |
 | Blog | MDX from `src/content/blog/*.mdx` via `next-mdx-remote/rsc` + `gray-matter` + `reading-time` + `remark-gfm` (tables). |
 | Email | Resend was used at first, then **removed** along with the contact form (the free sender only delivers to the account owner's address). The contact section now uses `mailto:` plus copy buttons. Zod was removed too. |
-| Database | None (Supabase was skipped). |
+| Database | **Upstash Redis** (Vercel Marketplace) for the navbar like count only. Supabase was skipped. |
 | Newsletter | None (by choice). |
 | Docker | Not needed — Vercel builds the site directly. |
 | Content | All copy lives in typed data files under `src/content/*.ts`. Components contain no hard-coded personal data. |
 
-Dependencies: clsx, framer-motion, gray-matter, lucide-react, next 15.5.28, next-mdx-remote, next-themes, react/react-dom 19.1.0, reading-time, remark-gfm. Dev: tailwindcss v4, @tailwindcss/postcss, eslint, typescript.
+Dependencies: @upstash/ratelimit, @upstash/redis, clsx, framer-motion, gray-matter, lucide-react, next 15.5.28, next-mdx-remote, next-themes, react/react-dom 19.1.0, reading-time, remark-gfm. Dev: tailwindcss v4, @tailwindcss/postcss, eslint, typescript.
 `package.json` includes `"allowScripts": {"unrs-resolver@1.12.2": true}` (needed for the install script).
 
-Environment variable: `NEXT_PUBLIC_SITE_URL=https://vigneshwarb.in` (set in Vercel; locally it falls back to `http://localhost:3000`). There are no other secrets. The old `.env.vercel` file was deleted.
+Environment variable: `NEXT_PUBLIC_SITE_URL=https://vigneshwarb.in` (set in Vercel; locally it falls back to `http://localhost:3000`). Like button: `KV_REST_API_URL`, `KV_REST_API_TOKEN` (added by the Upstash Marketplace integration) and `LIKE_SALT` (secret salt for visitor hashes). Without the KV vars `/api/likes` returns 503 and the button hides itself. The old `.env.vercel` file was deleted.
 
 ---
 
@@ -51,6 +51,7 @@ Environment variable: `NEXT_PUBLIC_SITE_URL=https://vigneshwarb.in` (set in Verc
 CLAUDE.md, README.md    root (must stay in the root)
 docs/                   CONTEXT.md (this file), plan.md, prompt.md, PLACEHOLDERS.md
 src/app/
+  api/likes/route.ts    GET count / POST like (Upstash Redis, Lua SET NX + INCR, 5/min rate limit), see §15
   layout.tsx            root: fonts, ThemeProvider, NetworkBackground (fixed, whole site), Navbar, Footer, metadata, JSON-LD
                         title default: `${profile.name} — Software Engineer · Backend · AI`  (title starts with "Vigneshwar B")
   page.tsx              home: Hero(about) → Experience → Skills → Projects → Achievements → Contact
@@ -61,7 +62,7 @@ src/app/
   sitemap.ts, robots.ts, opengraph-image.tsx, twitter-image.tsx, icon.svg, error/loading/not-found.tsx
 src/components/
   layout/Navbar.tsx     window-dots logo "~/vigneshwar.b", numbered lowercase links, active section highlighted while scrolling,
-                        bg-bg/90 backdrop-blur-xl, AmbientAudio button + theme toggle
+                        bg-bg/90 backdrop-blur-xl, AmbientAudio button + theme toggle + LikeButton
   layout/Footer.tsx     "© {year} Vigneshwar B" only ("Built with Next.js" was removed)
   sections/Hero.tsx     Hero and About merged into one section (id="about"), see §5
   sections/Terminal.tsx interactive terminal + notes, see §6
@@ -70,13 +71,14 @@ src/components/
   sections/Contact.tsx  email + phone cards with copy buttons; buttons: Send email, LinkedIn, GitHub, Resume;
                         heading "Let's build something together."
   diagrams/FlowDiagram.tsx  HTML boxes (16px labels), one row on desktop (lg), stacked on smaller screens
+  ui/LikeButton.tsx     navbar heart + count (see §15)
   ui/AmbientAudio.tsx   generated ambient pad music (Web Audio), see §7
   ui/NetworkBackground.tsx  animated network canvas behind every page
   ui/ButtonLink.tsx, Icon.tsx, Section.tsx
 src/content/
   profile.ts, experience.ts, skills.ts, projects.ts, achievements.ts, blog/*.mdx
 src/lib/
-  blog.ts (reads MDX + front matter), sfx.ts (terminal sounds), utils.ts
+  blog.ts (reads MDX + front matter), sfx.ts (terminal sounds + playLike), redis.ts (shared Upstash client, null if env missing), utils.ts
 public/
   images/profile.jpg (portrait), resume.pdf, logos/ (empty — company initials shown instead)
 ```
@@ -194,6 +196,14 @@ git add -A && git commit -m "..." && git push   # deploys to Vercel
 | 2026-11-02 | 2a6af6c, 3a49195 | Blog posts expanded with in-depth technical content |
 | 2026-11-02 | — | Added CONTEXT.md and CLAUDE.md |
 | 2026-11-02 | — | Planned navbar like button (Upstash Redis, atomic INCR + SET NX, rate limit) in docs/plan.md |
+| 2026-11-02 | — | Built like button: `api/likes/route.ts`, `lib/redis.ts`, `ui/LikeButton.tsx`, `playLike` in sfx, Navbar edit; deps @upstash/redis + @upstash/ratelimit |
+| 2026-11-02 | — | LikeButton made stateless (local count, unlimited clicks, no API call) — building step by step |
+| 2026-11-02 | — | Like button nudge: periodic shine + heartbeat + hint bubble until first like |
+| 2026-11-02 | — | Like button glow: 3 red pulses on arrival, then one every 8s until liked |
+| 2026-11-02 | — | Removed like-button hint bubble text; shine + heartbeat + glow remain |
+| 2026-11-02 | — | Like button hover tooltip changed to "♥ N" (aria-label unchanged) |
+| 2026-11-02 | — | Like count shown in full digits (no 1k shortening) |
+| 2026-11-02 | — | Like count uses comma separators (en-US) |
 | 2026-11-02 | — | Moved CONTEXT/plan/prompt/PLACEHOLDERS .md into `docs/`; CLAUDE.md and README.md stay in the root (Claude Code and GitHub only read them there) |
 
 ## 14. Open items
@@ -202,4 +212,17 @@ git add -A && git commit -m "..." && git push   # deploys to Vercel
 - Optional company logos in `public/logos`.
 - Owner to check the blog's technical details (see §4).
 - Search Console / Bing submission.
-- Like button in navbar — planned in `docs/plan.md` (Upstash Redis via Vercel Marketplace); not built yet.
+- Like button: UI done and stateless (§15); next step is wiring it to `/api/likes`. Owner must add Upstash Redis from Vercel Marketplace, set `LIKE_SALT`, then `vercel env pull .env.local` to test locally (curl + concurrency test from `docs/plan.md`, Playwright check).
+
+## 15. Like button
+
+- **Where:** navbar, after the theme toggle. `h-9 rounded-full border border-line px-2.5`, lucide `Heart` size 16; `text-muted` → `text-[var(--red)]` with filled heart once liked. Count in `font-mono text-xs tabular-nums`, hidden below `sm`, always shown in full with commas via `toLocaleString("en-US")`, never shortened (1,000 · 10,000,000).
+- **API** `src/app/api/likes/route.ts` (nodejs, force-dynamic):
+  - `GET` → `{ count }`, `Cache-Control: public, s-maxage=10, stale-while-revalidate=60`.
+  - `POST` → rejects missing/cross-origin `Origin` (403); `@upstash/ratelimit` sliding window 5/min per IP, prefix `rl:likes` (429); Lua script `SET like:v:<sha256(ip|ua|LIKE_SALT)> 1 NX EX 31536000` then `INCR likes:site` atomically → `{ count, liked: true, added }`; sets httpOnly `liked=1` cookie (1 year).
+  - 503 when `KV_REST_API_URL`/`KV_REST_API_TOKEN` are missing → button renders nothing.
+- **Current step (UI only, stateless):** `LikeButton` keeps the count in React state starting at 0, every click adds 1 (unlimited), resets on reload; it does NOT call `/api/likes` yet. Heart turns red/filled once count > 0. The API/redis code below exists but is not wired up.
+- **Nudge (until first like):** first after 6s, then every 20s, shown 3.5s. Button border/heart go `--red` (`border-[var(--red)]/60`), heart beats (scale 1→1.3→1→1.25→1, 1.1s), a light sweep `.like-shine` (globals.css, `via-fg/25` gradient, 1.1s ×2) crosses it. (The hint bubble with rotating text was removed at the owner's request.) Reduced motion: no shine/beat. Stops for good once count > 0.
+- **Glow (until first like):** red ring `.like-glow` (globals.css: box-shadow pulse with `color-mix(var(--red))`, 0.9s) on an absolute `rounded-full` span behind the button — 3 pulses 1.2s after load, then 1 pulse every 8s (`FIRST_GLOW_MS`, `GLOW_EVERY_MS`). Off with reduced motion.
+- **Planned client (step 2):** liked state from `localStorage["site-liked"]` (try/catch) — GET does not return `liked` (it is CDN-cached). Optimistic +1 on click, real count from POST, rolled back on error/429; disabled while in flight. Spring "pop" (Framer Motion) skipped with reduced motion. `playLike()` sound respects `ambient-muted`. `aria-pressed`, `aria-label` "Like this site (N likes)"; hover tooltip (`title`) is just "♥ N".
+- No unlike (by design).

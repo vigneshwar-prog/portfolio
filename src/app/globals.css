@@ -124,6 +124,18 @@ body {
 }
 .cup-shine { animation: cup-shine 3.5s ease-in-out infinite; }
 
+/* Like button nudge: one light sweep across the button */
+@keyframes like-shine { from { transform: translateX(0) skewX(-20deg); } to { transform: translateX(400%) skewX(-20deg); } }
+.like-shine { animation: like-shine 1.1s ease-in-out 2; }
+
+/* Like button glow ring (red pulse) */
+@keyframes like-glow {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--red) 70%, transparent); }
+  60% { box-shadow: 0 0 14px 5px color-mix(in srgb, var(--red) 35%, transparent); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
+.like-glow { animation: like-glow 0.9s ease-out; }
+
 /* Terminal block cursor */
 @keyframes term-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .term-cursor { animation: term-blink 1.05s step-end infinite; }
