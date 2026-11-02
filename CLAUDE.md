@@ -24,6 +24,11 @@ Personal portfolio for Vigneshwar B → https://vigneshwarb.in (Next.js 15 + Tai
 - Keep the hero grid fixed (`lg:grid-cols-[minmax(0,1fr)_560px]`) so the text doesn't move when the flip card switches.
 - Sounds and music must respect the `ambient-muted` setting.
 
+## Learnings notes (docs/notes.html)
+- When the owner learns something new during a task (a concept, tool, service or how something works), ask whether to save it to `docs/notes.html`. If yes, add it as one note (a `section.topic`) explaining how it works internally — learning content only, no task status or to-dos.
+- Put each note under a fitting category (e.g. Redis, Vercel, Next.js) and add a matching sidebar link under that category's group, numbered within the category. If none fits, propose a new category name and confirm it with the owner before adding it.
+- Write it in plain words with short examples; keep the page's existing style (light/dark tokens, phone width).
+
 ## Before you finish
 1. `npm run build` passes.
 2. Check visually with Playwright when the UI changes.

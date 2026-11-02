@@ -49,7 +49,7 @@ Environment variable: `NEXT_PUBLIC_SITE_URL=https://vigneshwarb.in` (set in Verc
 
 ```text
 CLAUDE.md, README.md    root (must stay in the root)
-docs/                   CONTEXT.md (this file), plan.md, prompt.md, PLACEHOLDERS.md
+docs/                   CONTEXT.md (this file), plan.md, prompt.md, PLACEHOLDERS.md, notes.html (learning notes in site colours: sidebar grouped by category → one note per topic; light/dark toggle. Notes: Redis · 01 "How Redis stores the like count on Vercel")
 src/app/
   api/likes/route.ts    GET count / POST like (Upstash Redis, Lua SET NX + INCR, 5/min rate limit), see §15
   layout.tsx            root: fonts, ThemeProvider, NetworkBackground (fixed, whole site), Navbar, Footer, metadata, JSON-LD
@@ -204,6 +204,10 @@ git add -A && git commit -m "..." && git push   # deploys to Vercel
 | 2026-11-02 | — | Like button hover tooltip changed to "♥ N" (aria-label unchanged) |
 | 2026-11-02 | — | Like count shown in full digits (no 1k shortening) |
 | 2026-11-02 | — | Like count uses comma separators (en-US) |
+| 2026-11-02 | — | Added docs/notes.html — like-button Redis explainer and next steps |
+| 2026-11-02 | — | CLAUDE.md rule: ask, then log new learnings by category in docs/notes.html ("New learnings" section added) |
+| 2026-11-02 | — | notes.html redesigned (site green theme, sidebar, tables, collapsible learnings) + Redis learnings added |
+| 2026-11-02 | — | notes.html reduced to learning notes only: one Redis note (in-memory key-value, INCR, single thread, SET NX + Lua, Upstash HTTPS on Vercel); task/status sections removed |
 | 2026-11-02 | — | Moved CONTEXT/plan/prompt/PLACEHOLDERS .md into `docs/`; CLAUDE.md and README.md stay in the root (Claude Code and GitHub only read them there) |
 
 ## 14. Open items
