@@ -87,4 +87,4 @@ git push -u origin main
 
 - A newsletter was intentionally left out of v1. To add one later, create `src/app/api/subscribe/route.ts` backed by Supabase or Resend Audiences.
 
-See **PLACEHOLDERS.md** for everything to replace before publishing.
+See **docs/PLACEHOLDERS.md** for everything to replace before publishing.

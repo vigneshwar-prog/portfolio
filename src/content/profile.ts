@@ -1,6 +1,6 @@
 /**
  * Central profile config. Replace every value wrapped in [BRACKETS]
- * before publishing — see PLACEHOLDERS.md.
+ * before publishing — see docs/PLACEHOLDERS.md.
  */
 export const isPlaceholder = (v?: string) => !v || /^\[.*\]$/.test(v);
 
