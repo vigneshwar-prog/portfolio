@@ -2,7 +2,7 @@
 
 > The single source of truth for this project: what was built, why, and every decision made.
 > Paste or load this file to rebuild or continue the site in a new session.
-> **Keep this file in sync** — see the rules in `CLAUDE.md`. Last updated: 2026-11-02.
+> **Keep this file in sync** — see the rules in `CLAUDE.md`. Last updated: 2026-11-03.
 
 ---
 
@@ -49,7 +49,7 @@ Environment variable: `NEXT_PUBLIC_SITE_URL=https://vigneshwarb.in` (set in Verc
 
 ```text
 CLAUDE.md, README.md    root (must stay in the root)
-docs/                   CONTEXT.md (this file), plan.md, prompt.md, PLACEHOLDERS.md, notes.html (learning notes in site colours: sidebar grouped by category → one note per topic; light/dark toggle. Notes: Redis · 01 "How Redis stores the like count on Vercel")
+docs/                   CONTEXT.md (this file), plan.md, prompt.md, PLACEHOLDERS.md, notes.html (learning notes in site colours: sidebar grouped by category → one note per topic; light/dark toggle. Notes: Redis · 01 "How Redis stores the like count on Vercel", Redis · 02 "How one like per visitor works")
 src/app/
   api/likes/route.ts    GET count / POST like (Upstash Redis, Lua SET NX + INCR, 5/min rate limit), see §15
   layout.tsx            root: fonts, ThemeProvider, NetworkBackground (fixed, whole site), Navbar, Footer, metadata, JSON-LD
@@ -208,7 +208,16 @@ git add -A && git commit -m "..." && git push   # deploys to Vercel
 | 2026-11-02 | — | CLAUDE.md rule: ask, then log new learnings by category in docs/notes.html ("New learnings" section added) |
 | 2026-11-02 | — | notes.html redesigned (site green theme, sidebar, tables, collapsible learnings) + Redis learnings added |
 | 2026-11-02 | — | notes.html reduced to learning notes only: one Redis note (in-memory key-value, INCR, single thread, SET NX + Lua, Upstash HTTPS on Vercel); task/status sections removed |
+| 2026-11-03 | — | LikeButton connected to /api/likes (Upstash Redis): GET count on load, optimistic POST with rollback, localStorage `site-liked`, disabled while saving, hidden if API fails; label "You liked this site (N likes)" once liked |
+| 2026-11-03 | — | Tested: first like +1, repeat = no change, cross-site/no Origin = 403, 6th request/min = 429, 200 visitors × 2 clicks (50 in flight) = exactly +200; reload keeps heart filled; test keys removed and count reset to 0 |
+| 2026-11-03 | — | notes.html: added Redis · 02 (no MAC, IP + UA + salt SHA-256 visitor ID, SET NX EX 1y, three layers, limits) |
+| 2026-11-03 | — | Fixed broken local styling (build overwrote dev server's .next); dev server restarted clean |
 | 2026-11-02 | — | Moved CONTEXT/plan/prompt/PLACEHOLDERS .md into `docs/`; CLAUDE.md and README.md stay in the root (Claude Code and GitHub only read them there) |
+
+## 12b. Like button issues
+- 400 parallel requests at once crashed `next dev` mid-test and my cleanup ran while requests were still landing (count left at 189). Fix: reset the database by hand; reran the test with at most 50 requests in flight → exact +200. Lesson: cap concurrency for dev-server tests and clean up only after all requests finish.
+
+- Local page lost all styling (plain HTML links, unstyled buttons) after running `npm run build` while `npm run dev` was running: both write `.next`, so the build replaced the dev server's CSS/chunks. Same cause as the earlier 500 on localhost. Fix: stop dev → `rm -rf .next` → `npm run dev`. Rule: stop the dev server before building (or build into a separate copy), and after any UI test check computed styles, not just labels.
 
 ## 14. Open items
 
@@ -216,7 +225,7 @@ git add -A && git commit -m "..." && git push   # deploys to Vercel
 - Optional company logos in `public/logos`.
 - Owner to check the blog's technical details (see §4).
 - Search Console / Bing submission.
-- Like button: UI done and stateless (§15); next step is wiring it to `/api/likes`. Owner must add Upstash Redis from Vercel Marketplace, set `LIKE_SALT`, then `vercel env pull .env.local` to test locally (curl + concurrency test from `docs/plan.md`, Playwright check).
+- Like button: connected and tested locally (§15). To go live: commit + push (the Vercel env vars are already set). Optional later: a separate Upstash database for Preview/Development so local tests don't touch the production count. Owner must add Upstash Redis from Vercel Marketplace, set `LIKE_SALT`, then `vercel env pull .env.local` to test locally (curl + concurrency test from `docs/plan.md`, Playwright check).
 
 ## 15. Like button
 
@@ -225,8 +234,8 @@ git add -A && git commit -m "..." && git push   # deploys to Vercel
   - `GET` → `{ count }`, `Cache-Control: public, s-maxage=10, stale-while-revalidate=60`.
   - `POST` → rejects missing/cross-origin `Origin` (403); `@upstash/ratelimit` sliding window 5/min per IP, prefix `rl:likes` (429); Lua script `SET like:v:<sha256(ip|ua|LIKE_SALT)> 1 NX EX 31536000` then `INCR likes:site` atomically → `{ count, liked: true, added }`; sets httpOnly `liked=1` cookie (1 year).
   - 503 when `KV_REST_API_URL`/`KV_REST_API_TOKEN` are missing → button renders nothing.
-- **Current step (UI only, stateless):** `LikeButton` keeps the count in React state starting at 0, every click adds 1 (unlimited), resets on reload; it does NOT call `/api/likes` yet. Heart turns red/filled once count > 0. The API/redis code below exists but is not wired up.
+- **Status:** live against Upstash Redis (one like per visitor). Local dev reads `.env.local` (`KV_REST_API_URL`, `KV_REST_API_TOKEN`, `LIKE_SALT`; git-ignored by `.env*`). The same database is shared by every environment, so local likes show on production.
 - **Nudge (until first like):** first after 6s, then every 20s, shown 3.5s. Button border/heart go `--red` (`border-[var(--red)]/60`), heart beats (scale 1→1.3→1→1.25→1, 1.1s), a light sweep `.like-shine` (globals.css, `via-fg/25` gradient, 1.1s ×2) crosses it. (The hint bubble with rotating text was removed at the owner's request.) Reduced motion: no shine/beat. Stops for good once count > 0.
 - **Glow (until first like):** red ring `.like-glow` (globals.css: box-shadow pulse with `color-mix(var(--red))`, 0.9s) on an absolute `rounded-full` span behind the button — 3 pulses 1.2s after load, then 1 pulse every 8s (`FIRST_GLOW_MS`, `GLOW_EVERY_MS`). Off with reduced motion.
-- **Planned client (step 2):** liked state from `localStorage["site-liked"]` (try/catch) — GET does not return `liked` (it is CDN-cached). Optimistic +1 on click, real count from POST, rolled back on error/429; disabled while in flight. Spring "pop" (Framer Motion) skipped with reduced motion. `playLike()` sound respects `ambient-muted`. `aria-pressed`, `aria-label` "Like this site (N likes)"; hover tooltip (`title`) is just "♥ N".
+- **Client:** liked state from `localStorage["site-liked"]` (try/catch) — GET does not return `liked` (it is CDN-cached). Optimistic +1 on click, real count from POST, rolled back on error/429; disabled while in flight. Spring "pop" (Framer Motion) skipped with reduced motion. `playLike()` sound respects `ambient-muted`. `aria-pressed`, `aria-label` "Like this site (N likes)"; hover tooltip (`title`) is just "♥ N".
 - No unlike (by design).

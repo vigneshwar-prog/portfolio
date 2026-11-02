@@ -16,13 +16,28 @@ const NUDGE_SHOW_MS = 3500;
 const FIRST_GLOW_MS = 1200; // first visit: glow 3 times shortly after load
 const GLOW_EVERY_MS = 8000; // then a single glow every few seconds
 
-/** Stateless for now: count lives only in memory and resets on reload; unlimited clicks. */
+const STORAGE_KEY = "site-liked";
+
+/** Shared like count from /api/likes (Upstash Redis). One like per visitor; hidden if the API is unavailable. */
 export function LikeButton() {
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState<number | null>(null);
+  const [liked, setLiked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const [pop, setPop] = useState(0);
   const [nudging, setNudging] = useState(false);
   const [glow, setGlow] = useState<{ id: number; times: number } | null>(null);
   const reduce = useReducedMotion();
-  const liked = count > 0;
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(STORAGE_KEY) === "1") setLiked(true);
+    } catch {}
+    fetch("/api/likes")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { count: number }) => setCount(d.count))
+      .catch(() => setUnavailable(true));
+  }, []);
 
   // Now and then, shine the button and beat the heart — stops once the visitor has liked.
   useEffect(() => {
@@ -53,13 +68,35 @@ export function LikeButton() {
     };
   }, [liked, reduce]);
 
-  function like() {
-    setCount((c) => c + 1);
+  async function like() {
+    if (liked || busy || count === null) return;
+    const prev = count;
+    setBusy(true);
+    setLiked(true);
+    setCount(prev + 1);
+    setPop((p) => p + 1);
     setNudging(false);
     playLike();
+    try {
+      const r = await fetch("/api/likes", { method: "POST" });
+      if (!r.ok) throw new Error(String(r.status));
+      const d: { count: number } = await r.json();
+      setCount(d.count);
+      try {
+        localStorage.setItem(STORAGE_KEY, "1");
+      } catch {}
+    } catch {
+      setLiked(false);
+      setCount(prev);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const label = `Like this site (${count} likes)`;
+  if (unavailable) return null;
+
+  const shown = count === null ? "–" : format(count);
+  const label = liked ? `You liked this site (${shown} likes)` : `Like this site (${shown} likes)`;
 
   return (
     <div className="relative">
@@ -76,9 +113,10 @@ export function LikeButton() {
         onClick={like}
         aria-pressed={liked}
         aria-label={label}
-        title={`♥ ${format(count)}`}
+        title={`♥ ${shown}`}
+        disabled={busy}
         className={cn(
-          "relative flex h-9 items-center gap-1.5 overflow-hidden rounded-full border px-2.5 transition",
+          "relative flex h-9 disabled:cursor-wait items-center gap-1.5 overflow-hidden rounded-full border px-2.5 transition",
           liked ? "border-line text-[var(--red)]" : "text-muted hover:border-line-strong hover:text-fg",
           !liked && (nudging ? "border-[var(--red)]/60 text-[var(--red)]" : "border-line"),
         )}
@@ -90,9 +128,9 @@ export function LikeButton() {
           />
         )}
         <motion.span
-          key={liked ? count : `n${nudging}`}
+          key={liked ? `p${pop}` : `n${nudging}`}
           className="grid place-items-center"
-          initial={reduce || (count === 0 && !nudging) ? false : { scale: 0.6 }}
+          initial={reduce || (pop === 0 && !nudging) ? false : { scale: 0.6 }}
           animate={nudging && !reduce ? { scale: [1, 1.3, 1, 1.25, 1] } : { scale: 1 }}
           transition={
             nudging && !reduce
@@ -102,9 +140,8 @@ export function LikeButton() {
         >
           <Heart size={16} fill={liked ? "currentColor" : "none"} />
         </motion.span>
-        <span className="hidden min-w-[1ch] font-mono text-xs tabular-nums sm:inline">{format(count)}</span>
+        <span className="hidden min-w-[1ch] font-mono text-xs tabular-nums sm:inline">{shown}</span>
       </button>
-
     </div>
   );
 }

@@ -126,6 +126,7 @@
       <div class="nav-group">Redis</div>
       <ul>
         <li><a href="#redis-like-counter"><span class="num">01</span>Like counter on Vercel</a></li>
+        <li><a href="#redis-one-like"><span class="num">02</span>One like per visitor</a></li>
       </ul>
     </nav>
     <button class="theme-btn" id="theme" type="button">Toggle theme</button>
@@ -179,6 +180,50 @@ A: INCR → 1235 · B: INCR → 1236                               <span class="
 
         <h4>In one line</h4>
         <p>Redis keeps the count in memory as one number, <code>INCR</code> and a Lua script make every update a single uninterruptible step, and Upstash lets short-lived Vercel functions reach it over HTTPS.</p>
+      </section>
+      <section class="topic" id="redis-one-like">
+        <div class="topic-head"><span class="pill">Redis · 02</span><h3>How "one like per visitor" works</h3></div>
+
+        <h4>1. What the server can actually see</h4>
+        <p>A website never sees your <strong>MAC address</strong>. It only exists on your local network, and your router swaps it out before traffic reaches the internet. What arrives at the server is:</p>
+        <div class="table-wrap"><table>
+          <tr><th>Signal</th><th>Example</th><th>Notes</th></tr>
+          <tr><td>IP address</td><td><code>49.37.x.x</code></td><td>From the <code>x-forwarded-for</code> header on Vercel. Shared by everyone on the same Wi-Fi.</td></tr>
+          <tr><td>User-agent</td><td><code>Chrome 131 / macOS</code></td><td>Browser and OS. Tells people on the same Wi-Fi apart.</td></tr>
+        </table></div>
+
+        <h4>2. Turning them into a visitor ID</h4>
+        <p>The server joins IP + user-agent + a secret (<code>LIKE_SALT</code>) and runs it through <strong>SHA-256</strong>, a one-way hash:</p>
+<pre><code>sha256(<span class="c-a">"49.37.12.8"</span> + <span class="c-a">"Chrome/macOS"</span> + <span class="c-a">LIKE_SALT</span>)
+  <span class="c-m">→</span> <span class="c-g">9f2c…e1</span>          <span class="c-m"># same visitor → same ID every time</span></code></pre>
+        <p>A hash can't be turned back into the IP. The secret salt matters: without it, someone could hash every possible IP (there are only about 4 billion) and match them up.</p>
+
+        <h4>3. Locking the like with SET NX</h4>
+        <p>The ID becomes a Redis key. <code>SET … NX</code> writes it <strong>only if it doesn't exist yet</strong>, and only then does the count go +1:</p>
+<pre><code><span class="c-m"># first like</span>
+SET like:v:9f2c…e1 1 NX EX 31536000   <span class="c-g">→ OK</span>    <span class="c-m">then INCR likes:site</span>
+<span class="c-m"># any later like from the same visitor</span>
+SET like:v:9f2c…e1 1 NX EX 31536000   <span class="c-red">→ nil</span>   <span class="c-m">count unchanged</span></code></pre>
+        <p><code>EX 31536000</code> = one year, after which the key deletes itself and the visitor could like again. Both steps run in one Lua script (see Redis · 01), so two fast clicks can't both pass.</p>
+
+        <h4>4. The three layers</h4>
+        <div class="table-wrap"><table>
+          <tr><th>Layer</th><th>Where</th><th>Job</th></tr>
+          <tr><td>Visitor key</td><td>Redis</td><td>The real lock. Can't be bypassed by clearing the browser.</td></tr>
+          <tr><td>localStorage</td><td>Browser</td><td>Keeps the heart filled on reload and skips useless requests. Easy to clear, so never trusted alone.</td></tr>
+          <tr><td>Rate limit</td><td>Redis (<code>@upstash/ratelimit</code>)</td><td>Max 5 requests/min per IP. Stops bots hammering the API. Not the duplicate check.</td></tr>
+        </table></div>
+
+        <h4>5. Limits of this approach</h4>
+        <p>Without sign-in, no website can identify a <em>person</em>, only a network + browser:</p>
+        <ul>
+          <li><strong>Different browser, VPN or mobile data</strong> → new IP or user-agent → counts as a new visitor.</li>
+          <li><strong>Two people, same Wi-Fi, identical browser</strong> → same ID → counted once.</li>
+        </ul>
+        <p>For a like counter that's an acceptable trade-off. Only login guarantees one per person.</p>
+
+        <h4>In one line</h4>
+        <p>The server hashes IP + browser + a secret into a visitor ID, and Redis <code>SET NX</code> lets that ID add +1 only once a year.</p>
       </section>
     </div>
   </main>
